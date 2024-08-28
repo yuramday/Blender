@@ -1,0 +1,54 @@
+import bpy
+
+def create_empty_for_collection(collection, parent_empty=None):
+    """Создает пустышку для данной коллекции и иерархически связывает её с родителем, если он есть."""
+    if collection.name == bpy.context.scene.collection.name:
+        return None
+    
+    # Создаем пустышку только если её ещё нет
+    if collection.name not in bpy.data.objects:
+        empty = bpy.data.objects.new(collection.name, None)
+        bpy.context.scene.collection.objects.link(empty)
+        if parent_empty:
+            empty.parent = parent_empty
+        
+        # Рекурсивно создаем пустышки для дочерних коллекций
+        for child_collection in collection.children:
+            create_empty_for_collection(child_collection, empty)
+    
+    return bpy.data.objects[collection.name]
+
+def move_objects_to_empties():
+    """Перемещает объекты из коллекций в главную коллекцию, затем создает пустышки и привязывает объекты к ним."""
+    # Создаем пустышки для всех коллекций в сцене
+    empty_map = {}  # Для хранения ссылок на пустышки
+    for collection in bpy.data.collections:
+        if collection.name != bpy.context.scene.collection.name:
+            empty = create_empty_for_collection(collection)
+            if empty:
+                empty_map[collection.name] = empty
+    
+    # Перемещаем объекты из коллекций в главную коллекцию и привязываем к пустышкам
+    for collection in list(bpy.data.collections):
+        if collection.name != bpy.context.scene.collection.name:
+            parent_empty = empty_map.get(collection.name)
+            
+            for obj in list(collection.objects):
+                if obj.type == 'MESH':
+                    # Переместить объект в главную коллекцию
+                    bpy.context.scene.collection.objects.link(obj)
+                    # Удалить объект из текущей коллекции
+                    collection.objects.unlink(obj)
+                    # Привязать объект к пустышке
+                    if parent_empty:
+                        obj.parent = parent_empty
+            
+            # Удалить пустую коллекцию
+            if not collection.objects:
+                bpy.data.collections.remove(collection)
+
+def main():
+    move_objects_to_empties()  # Перемещение объектов под пустышки
+
+# Запуск функции
+main()
