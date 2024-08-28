@@ -1,0 +1,111 @@
+import bpy
+
+def create_collection_hierarchy_for_object(obj):
+    """Создает коллекции по иерархии родительских объектов и возвращает самую глубокую коллекцию."""
+    # Получаем полный путь коллекции, основываясь на иерархии родителей
+    collection_path = []
+    parent = obj.parent
+    while parent:
+        collection_path.append(parent.name)
+        parent = parent.parent
+    collection_path.reverse()
+    
+    # Создаем коллекции по пути
+    parent_collection = bpy.context.scene.collection
+    for coll_name in collection_path:
+        if coll_name not in bpy.data.collections:
+            new_collection = bpy.data.collections.new(coll_name)
+            parent_collection.children.link(new_collection)
+            # Назначаем цвет для коллекции
+            assign_color_to_collection(new_collection, coll_name)
+        parent_collection = bpy.data.collections[coll_name]
+    
+    return parent_collection
+
+def assign_color_to_collection(collection, name):
+    """Назначает цвет коллекции на основе ее имени, если название содержит определённые ключевые слова."""
+    color_mapping = {
+        "visual": 'COLOR_02',   # Оранжевый
+        "shadow": 'COLOR_05',   # Синий
+        "collision": 'COLOR_04',# Зеленый
+        "_": 'COLOR_03'         # Желтый
+    }
+    
+    lower_name = name.lower()
+    
+    # Проверка на вхождение ключевых слов в название коллекции
+    for key, color in color_mapping.items():
+        if key in lower_name:
+            collection.color_tag = color
+            return  # Назначили цвет и выходим из функции
+    
+    # Если ни одно ключевое слово не найдено, установить цвет по умолчанию
+    collection.color_tag = 'NONE'
+
+# Пример использования
+for collection in bpy.data.collections:
+    assign_color_to_collection(collection, collection.name)
+
+def apply_scale_to_all_meshes():
+    """Применяет масштабирование ко всем объектам типа 'MESH'."""
+    bpy.ops.object.select_all(action='SELECT')
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH':
+            obj.select_set(True)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    bpy.ops.object.select_all(action='DESELECT')
+
+def move_objects_to_collections():
+    """Перемещает объекты в соответствующие коллекции на основе их иерархии пустышек."""
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH' and obj.parent:
+            # Убираем родительскую связь
+            parent_collection = create_collection_hierarchy_for_object(obj)
+            obj.parent = None
+            
+            # Удаляем объект из всех текущих коллекций
+            for coll in obj.users_collection:
+                coll.objects.unlink(obj)
+            
+            # Добавляем объект в новую коллекцию
+            parent_collection.objects.link(obj)
+    
+    # Удаляем объекты, которые не принадлежат ни одной коллекции
+    for obj in bpy.context.scene.objects:
+        if obj.type == 'MESH' and not obj.users_collection:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+def delete_all_empty_objects():
+    """Удаляет все объекты типа 'Empty'."""
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.ops.object.select_by_type(type='EMPTY')
+    bpy.ops.object.delete()
+    
+def update_collections():
+    """Обновляет состояние коллекций, чтобы убедиться, что все изменения корректно учтены."""
+    bpy.context.view_layer.update()    
+    
+def rename_collections_with_conflict():
+    """Переименовывает коллекции с одинаковыми именами, добавляя префикс."""
+    name_count = {}
+    
+    for collection in bpy.data.collections:
+        base_name = collection.name.split('.')[0]
+        
+        # Если имя коллекции уже встречалось, добавляем суффикс
+        if base_name in name_count:
+            name_count[base_name] += 1
+            new_name = f"{base_name}_"
+            collection.name = new_name
+        else:
+            name_count[base_name] = 0    
+
+def main():
+    update_collections()  # Обновление состояния коллекций
+    rename_collections_with_conflict()
+    apply_scale_to_all_meshes()  # Применение масштабирования ко всем мешам
+    move_objects_to_collections()  # Перемещение объектов в коллекции
+    delete_all_empty_objects()  # Удаление всех пустышек
+
+# Запуск функции
+main()
